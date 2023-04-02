@@ -1,0 +1,8 @@
+[package]
+name = "tools"
+version = "0.1.0"
+authors = []
+publish = false
+
+[dependencies]
+copy_to_output = "2.1.0"

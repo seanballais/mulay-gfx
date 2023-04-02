@@ -46,5 +46,11 @@ fn main() {
         if do_quit {
             break;
         }
+
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+        }
+
+        window.gl_swap_window();
     }
 }

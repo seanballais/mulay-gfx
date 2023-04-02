@@ -1,0 +1,2 @@
+[alias]
+copy-assets-to-build = "run --package tools --bin copy-assets-to-build"

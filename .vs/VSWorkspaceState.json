@@ -1,8 +1,12 @@
 {
   "ExpandedNodes": [
     "",
-    "\\src"
+    "\\.cargo",
+    "\\src",
+    "\\tools",
+    "\\tools\\src",
+    "\\tools\\src\\bin"
   ],
-  "SelectedNode": "\\Cargo.toml",
+  "SelectedNode": "\\tools\\src\\bin\\copy-assets-to-build.rs",
   "PreviewInSolutionExplorer": false
 }
