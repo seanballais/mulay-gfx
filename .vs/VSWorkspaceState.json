@@ -2,11 +2,14 @@
   "ExpandedNodes": [
     "",
     "\\.cargo",
+    "\\assets",
+    "\\assets\\shaders",
     "\\src",
+    "\\src\\assets",
     "\\tools",
     "\\tools\\src",
     "\\tools\\src\\bin"
   ],
-  "SelectedNode": "\\tools\\src\\bin\\copy-assets-to-build.rs",
+  "SelectedNode": "\\src\\c_bridge.rs",
   "PreviewInSolutionExplorer": false
 }
