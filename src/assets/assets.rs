@@ -205,8 +205,10 @@ impl Asset for Shader {
     }
 
     fn destroy(&mut self) -> Result<(), AssetError> {
-        // Some piece of code might attempt to access asset data, so best we
-        // clear the data we are holding in this asset just to be sure.
+        unsafe {
+            gl::DeleteShader(self.shader_id);
+        };
+
         self.id.clear();
         self.src_file_path.clear();
         self.is_loaded = false;
