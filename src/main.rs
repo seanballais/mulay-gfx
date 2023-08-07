@@ -3,10 +3,13 @@ extern crate sdl2;
 
 mod assets;
 mod c_bridge;
+mod graphics;
 
-use std::ffi;
+use graphics::Program;
+
 use std::mem;
 use std::os;
+use std::sync::Arc;
 use std::ptr;
 
 use sdl2::event::Event;
@@ -49,27 +52,10 @@ fn main() {
         Err(err) => panic!("{:?}", err), // For now. Maybe.
     };
 
-    let vertex_shader_id = match vertex_shader.lock() {
-        Ok(shader) => shader.get_shader_id(),
-        Err(error) => panic!("{:?}", error) // For now. Maybe.
+    let shader_program: Program = match Program::new(vec![Arc::clone(&vertex_shader), Arc::clone(&fragment_shader)]) {
+        Ok(program) => program,
+        Err(err) => panic!("{:?}", err)
     };
-
-    let fragment_shader_id = match fragment_shader.lock() {
-        Ok(shader) => shader.get_shader_id(),
-        Err(error) => panic!("{:?}", error) // For now. Maybe.
-    };
-
-    let mut shader_program: u32 = 0;
-    unsafe {
-        shader_program = gl::CreateProgram();
-        gl::AttachShader(shader_program, vertex_shader_id);
-        gl::AttachShader(shader_program, fragment_shader_id);
-
-        gl::LinkProgram(shader_program);
-
-        gl::DeleteShader(vertex_shader_id);
-        gl::DeleteShader(fragment_shader_id);
-    }
 
     let mut vao_id: u32 = 0;
     let mut vbo_id: u32 = 0;
@@ -123,7 +109,7 @@ fn main() {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            gl::UseProgram(shader_program);
+            gl::UseProgram(shader_program.id());
             gl::BindVertexArray(vao_id);
 
             gl::DrawArrays(gl::TRIANGLES, 0, 3);

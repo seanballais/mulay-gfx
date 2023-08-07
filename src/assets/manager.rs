@@ -7,6 +7,12 @@ pub struct AssetManager<A: Asset> {
     assets: HashMap<String, Arc<Mutex<A>>>,
 }
 
+impl<A: Asset> Drop for AssetManager<A> {
+    fn drop(&mut self) {
+        // TODO: Implement drop for asset managers.
+    }
+}
+
 impl<A: Asset> AssetManager<A> {
     pub fn new() -> Self {
         AssetManager {
@@ -63,7 +69,7 @@ impl<A: Asset> AssetManager<A> {
                     Err(err) => Err(err),
                 },
                 Err(err) => Err(AssetError::new(
-                    format!("asset lock poisoned"),
+                    "asset lock poisoned",
                     AssetErrorKind::Poisoned,
                     None,
                 )),
