@@ -9,8 +9,8 @@ use graphics::Program;
 
 use std::mem;
 use std::os;
-use std::sync::Arc;
 use std::ptr;
+use std::sync::Arc;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -42,19 +42,29 @@ fn main() {
         -0.5f32, -0.5f32, 0.0f32, 0.5f32, -0.5f32, 0.0f32, 0.0f32, 0.5f32, 0.0f32,
     ];
 
-    let mut shader_asset_manager = assets::AssetManager::<assets::Shader>::new();
-    let vertex_shader = match shader_asset_manager.load_asset("vertex-shader", "assets/shaders/triangle.vert") {
-        Ok(ptr) => ptr,
-        Err(err) => panic!("{:?}", err), // For now. Maybe.
+    let mut shader_asset_manager = match assets::AssetManager::<assets::Shader>::new() {
+        Ok(manager) => manager,
+        Err(error) => panic!("{:?}", error), // For now. Maybe.
     };
-    let fragment_shader = match shader_asset_manager.load_asset("fragment-shader", "assets/shaders/triangle.frag") {
-        Ok(ptr) => ptr,
-        Err(err) => panic!("{:?}", err), // For now. Maybe.
-    };
+    let vertex_shader =
+        match shader_asset_manager.load_asset("vertex-shader", "assets/shaders/triangle.vert") {
+            Ok(ptr) => ptr,
+            Err(err) => panic!("{:?}", err), // For now. Maybe.
+        };
+    let fragment_shader =
+        match shader_asset_manager.load_asset("fragment-shader", "assets/shaders/triangle.frag") {
+            Ok(ptr) => ptr,
+            Err(err) => panic!("{:?}", err), // For now. Maybe.
+        };
 
-    let shader_program: Program = match Program::new(vec![Arc::clone(&vertex_shader), Arc::clone(&fragment_shader)]) {
+    shader_asset_manager.watch();
+
+    let shader_program: Program = match Program::new(vec![
+        Arc::clone(&vertex_shader),
+        Arc::clone(&fragment_shader),
+    ]) {
         Ok(program) => program,
-        Err(err) => panic!("{:?}", err)
+        Err(err) => panic!("{:?}", err),
     };
 
     let mut vao_id: u32 = 0;

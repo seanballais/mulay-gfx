@@ -7,19 +7,19 @@ use crate::assets::Shader;
 
 use std::error::Error;
 use std::fmt;
-use std::sync::{Arc, Mutex};
 use std::mem;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ProgramErrorKind {
-    ShaderAssetPoisoned
+    ShaderAssetPoisoned,
 }
 
 #[derive(Debug)]
 pub struct ProgramError {
     source: Option<Box<dyn Error + 'static>>,
     message: String,
-    kind: ProgramErrorKind
+    kind: ProgramErrorKind,
 }
 
 impl ProgramError {
@@ -49,8 +49,8 @@ impl Error for ProgramError {
 }
 
 pub struct Program {
-	id: gl::types::GLuint,
-    shaders: Vec<Arc<Mutex<Shader>>>
+    id: gl::types::GLuint,
+    shaders: Vec<Arc<Mutex<Shader>>>,
 }
 
 impl Drop for Program {
@@ -60,38 +60,48 @@ impl Drop for Program {
 }
 
 impl Program {
-	pub fn new(shaders: Vec<Arc<Mutex<Shader>>>) -> Result<Self, ProgramError> {
+    pub fn new(shaders: Vec<Arc<Mutex<Shader>>>) -> Result<Self, ProgramError> {
         let program_id: gl::types::GLuint = unsafe { gl::CreateProgram() };
         let program: Self = Self {
             id: program_id,
-            shaders: shaders
+            shaders: shaders,
         };
 
         for shader in &program.shaders {
             match shader.lock() {
                 Ok(shader_ptr) => {
-                    unsafe { gl::AttachShader(program_id, shader_ptr.get_shader_id()); };
-                },
-                Err(_) => return Err(ProgramError::new(
-                    "shader asset is poisoned",
-                    ProgramErrorKind::ShaderAssetPoisoned,
-                    None
-                ))
+                    unsafe {
+                        gl::AttachShader(program_id, shader_ptr.get_shader_id());
+                    };
+                }
+                Err(_) => {
+                    return Err(ProgramError::new(
+                        "shader asset is poisoned",
+                        ProgramErrorKind::ShaderAssetPoisoned,
+                        None,
+                    ))
+                }
             }
         }
 
-        unsafe { gl::LinkProgram(program_id); };
+        unsafe {
+            gl::LinkProgram(program_id);
+        };
 
         for shader in &program.shaders {
             match shader.lock() {
                 Ok(shader_ptr) => {
-                    unsafe { gl::DetachShader(program_id, shader_ptr.get_shader_id()); };
-                },
-                Err(_) => return Err(ProgramError::new(
-                    "shader asset is poisoned",
-                    ProgramErrorKind::ShaderAssetPoisoned,
-                    None
-                ))
+                    unsafe {
+                        gl::DetachShader(program_id, shader_ptr.get_shader_id());
+                    };
+                }
+                Err(_) => {
+                    return Err(ProgramError::new(
+                        "shader asset is poisoned",
+                        ProgramErrorKind::ShaderAssetPoisoned,
+                        None,
+                    ))
+                }
             }
         }
 

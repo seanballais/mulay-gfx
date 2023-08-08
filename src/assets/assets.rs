@@ -18,7 +18,7 @@ pub enum AssetErrorKind {
     NotLoaded,
     Poisoned,
     InvalidFileExtension,
-    ReloadingFailed
+    ReloadingFailed,
 }
 
 #[derive(Debug)]
@@ -99,9 +99,7 @@ pub trait Asset {
         Self: Sized;
     fn reload(&mut self) -> Result<(), AssetError>;
     fn destroy(&mut self) -> Result<(), AssetError>;
-    fn mark_stale(&mut self);
     fn is_loaded(&self) -> bool;
-    fn is_stale(&self) -> bool;
 }
 
 pub struct Shader {
@@ -119,9 +117,12 @@ impl Asset for Shader {
             Some(extension) => extension,
             None => {
                 return Err(AssetError::new(
-                    format!("shader source file from {} does not have a valid file extension", file_path.as_ref()),
+                    format!(
+                        "shader source file from {} does not have a valid file extension",
+                        file_path.as_ref()
+                    ),
                     AssetErrorKind::InvalidFileExtension,
-                    None
+                    None,
                 ));
             }
         };
@@ -131,9 +132,12 @@ impl Asset for Shader {
             Some("frag") => gl::FRAGMENT_SHADER,
             _ => {
                 return Err(AssetError::new(
-                    format!("shader source file extension of {} is neither \".vert\" or \".frag\".", file_path.as_ref()),
+                    format!(
+                        "shader source file extension of {} is neither \".vert\" or \".frag\".",
+                        file_path.as_ref()
+                    ),
                     AssetErrorKind::InvalidFileExtension,
-                    None
+                    None,
                 ));
             }
         };
@@ -142,11 +146,13 @@ impl Asset for Shader {
             Ok(contents) => {
                 let shader_id: gl::types::GLuint = match Self::compile(contents.as_str(), kind) {
                     Ok(id) => id,
-                    Err(error) => return Err(AssetError::new(
-                        format!("unable to compile shader from {}", file_path.as_ref()),
-                        AssetErrorKind::LoadingFailed,
-                        Some(Box::new(error))
-                    ))
+                    Err(error) => {
+                        return Err(AssetError::new(
+                            format!("unable to compile shader from {}", file_path.as_ref()),
+                            AssetErrorKind::LoadingFailed,
+                            Some(Box::new(error)),
+                        ))
+                    }
                 };
 
                 let shader: Self = Self {
@@ -155,11 +161,11 @@ impl Asset for Shader {
                     kind: kind,
                     src_file_path: file_path.as_ref().into(),
                     is_loaded: true,
-                    is_stale: false
+                    is_stale: false,
                 };
 
                 Ok(shader)
-            },
+            }
             Err(error) => Err(AssetError::new(
                 format!("unable to load asset from {}", file_path.as_ref()),
                 AssetErrorKind::LoadingFailed,
@@ -179,15 +185,18 @@ impl Asset for Shader {
 
         match fs::read_to_string(self.src_file_path.as_str()) {
             Ok(contents) => {
-                let new_shader_id: gl::types::GLuint = match Self::compile(contents.as_str(), self.kind) {
-                    Ok(id) => id,
-                    Err(error) => return Err(AssetError::new(
-                        format!("unable to hot-reload shader from {}", self.src_file_path),
-                        AssetErrorKind::ReloadingFailed,
-                        Some(Box::new(error))
-                    ))
-                };
-                
+                let new_shader_id: gl::types::GLuint =
+                    match Self::compile(contents.as_str(), self.kind) {
+                        Ok(id) => id,
+                        Err(error) => {
+                            return Err(AssetError::new(
+                                format!("unable to hot-reload shader from {}", self.src_file_path),
+                                AssetErrorKind::ReloadingFailed,
+                                Some(Box::new(error)),
+                            ))
+                        }
+                    };
+
                 unsafe {
                     gl::DeleteShader(self.shader_id);
                 }
@@ -216,16 +225,8 @@ impl Asset for Shader {
         Ok(())
     }
 
-    fn mark_stale(&mut self) {
-        self.is_stale = true;
-    }
-
     fn is_loaded(&self) -> bool {
         self.is_loaded
-    }
-
-    fn is_stale(&self) -> bool {
-        self.is_stale
     }
 }
 
