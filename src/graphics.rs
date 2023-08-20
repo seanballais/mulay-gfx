@@ -111,4 +111,53 @@ impl Program {
     pub fn id(&self) -> gl::types::GLuint {
         self.id
     }
+
+    pub fn reload(&mut self) -> Result<(), ProgramError> {
+        unsafe {
+            gl::DeleteProgram(self.id);
+        };
+
+        let program_id: gl::types::GLuint = unsafe { gl::CreateProgram() };
+        for shader in &self.shaders {
+            match shader.lock() {
+                Ok(shader_ptr) => {
+                    unsafe {
+                        gl::AttachShader(program_id, shader_ptr.get_shader_id());
+                    };
+                }
+                Err(_) => {
+                    return Err(ProgramError::new(
+                        "shader asset is poisoned",
+                        ProgramErrorKind::ShaderAssetPoisoned,
+                        None,
+                    ))
+                }
+            }
+        }
+
+        unsafe {
+            gl::LinkProgram(program_id);
+        };
+
+        for shader in &self.shaders {
+            match shader.lock() {
+                Ok(shader_ptr) => {
+                    unsafe {
+                        gl::DetachShader(program_id, shader_ptr.get_shader_id());
+                    };
+                }
+                Err(_) => {
+                    return Err(ProgramError::new(
+                        "shader asset is poisoned",
+                        ProgramErrorKind::ShaderAssetPoisoned,
+                        None,
+                    ))
+                }
+            }
+        }
+
+        self.id = program_id;
+
+        Ok(())
+    }
 }

@@ -8,7 +8,7 @@ mod graphics;
 use std::mem;
 use std::os;
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -66,19 +66,21 @@ fn main() {
         "assets/shaders/triangle.frag",
     ]);
 
-    let shader_program: Program = match Program::new(vec![
+    let shader_program: Arc<Mutex<Program>> = match Program::new(vec![
         Arc::clone(&vertex_shader),
         Arc::clone(&fragment_shader),
     ]) {
-        Ok(program) => program,
+        Ok(program) => Arc::new(Mutex::new(program)),
         Err(err) => panic!("{:?}", err),
     };
-
-    shader_asset_manager.register_asset_reload_callback("vertex-shader", || {
-        println!("Vertex shader test.");
+    
+    let shader_program_ptr1 = Arc::clone(&shader_program);
+    let shader_program_ptr2 = Arc::clone(&shader_program);
+    shader_asset_manager.register_asset_reload_callback("vertex-shader", move || {
+        shader_program_ptr1.lock().unwrap().reload().unwrap();
     });
-    shader_asset_manager.register_asset_reload_callback("fragment-shader", || {
-        println!("Fragment shader test.");
+    shader_asset_manager.register_asset_reload_callback("fragment-shader", move || {
+        shader_program_ptr2.lock().unwrap().reload().unwrap();
     });
 
     let mut vao_id: u32 = 0;
@@ -145,7 +147,7 @@ fn main() {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            gl::UseProgram(shader_program.id());
+            gl::UseProgram(shader_program.lock().unwrap().id());
             gl::BindVertexArray(vao_id);
 
             gl::DrawArrays(gl::TRIANGLES, 0, 3);

@@ -51,7 +51,7 @@ impl Error for AssetManagerError {
 
 pub struct AssetManager<A: Asset> {
     assets: HashMap<String, Arc<Mutex<A>>>,
-    callbacks: HashMap<String, Vec<fn()>>,
+    callbacks: HashMap<String, Vec<Box<dyn FnMut()>>>,
     file_path_to_asset_id_map: HashMap<PathBuf, String>,
 }
 
@@ -203,16 +203,16 @@ impl<A: Asset> AssetManager<A> {
         }
     }
 
-    pub fn register_asset_reload_callback<S: AsRef<str>>(
+    pub fn register_asset_reload_callback<S: AsRef<str>, F: FnMut() + Send + 'static>(
         &mut self,
         target_asset_id: S,
-        callback: fn(),
+        callback: F,
     ) {
         match self.callbacks.get_mut(target_asset_id.as_ref().into()) {
-            Some(callbacks) => callbacks.push(callback),
+            Some(callbacks) => callbacks.push(Box::new(callback)),
             None => {
                 self.callbacks
-                    .insert(target_asset_id.as_ref().into(), vec![callback]);
+                    .insert(target_asset_id.as_ref().into(), vec![Box::new(callback)]);
             }
         };
     }
@@ -256,7 +256,7 @@ impl<A: Asset> AssetManager<A> {
         &mut self,
         asset_id: &String,
     ) -> Result<Option<()>, AssetManagerError> {
-        if let Some(callbacks) = self.callbacks.get(asset_id.as_str()) {
+        if let Some(callbacks) = self.callbacks.get_mut(asset_id.as_str()) {
             for func in callbacks {
                 func();
             }
