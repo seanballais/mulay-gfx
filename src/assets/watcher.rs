@@ -43,7 +43,7 @@ impl Error for AssetsWatcherError {
     }
 }
 
-struct AssetsWatcher {
+pub struct AssetsWatcher {
     watcher: notify::RecommendedWatcher,
 	stale_paths: Arc<RwLock<Vec<PathBuf>>>
 }
@@ -98,7 +98,7 @@ impl AssetsWatcher {
         Ok(Self {watcher, stale_paths})
 	}
 
-	pub fn add_paths_to_watchlist(&self, paths: &Vec<PathBuf>) {
+	pub fn add_paths_to_watchlist(&mut self, paths: &Vec<PathBuf>) {
         for path in paths {
             // Docs of notify-rs does not specify any reason for an error to be returned, so
             // for now, we can confidently use unwrap() in this case.

@@ -4,7 +4,7 @@ use std::error::Error;
 use std::ffi::{CString, OsStr};
 use std::fmt;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr;
 
 use crate::c_bridge;
@@ -94,32 +94,33 @@ impl Error for ShaderError {
 }
 
 pub trait Asset {
-    fn new<S: AsRef<str>>(id: S, file_path: S) -> Result<Self, AssetError>
+    fn new<S: AsRef<str>>(id: S, file_path: &Path) -> Result<Self, AssetError>
     where
         Self: Sized;
     fn reload(&mut self) -> Result<(), AssetError>;
     fn destroy(&mut self) -> Result<(), AssetError>;
     fn is_loaded(&self) -> bool;
+    fn get_src_file_path(&self) -> &Path;
 }
 
 pub struct Shader {
     id: String,
     shader_id: gl::types::GLuint,
     kind: gl::types::GLenum,
-    src_file_path: String,
+    src_file_path: PathBuf,
     is_loaded: bool,
     is_stale: bool,
 }
 
 impl Asset for Shader {
-    fn new<S: AsRef<str>>(id: S, file_path: S) -> Result<Self, AssetError> {
-        let file_ext: &OsStr = match Path::new(file_path.as_ref()).extension() {
+    fn new<S: AsRef<str>>(id: S, file_path: &Path) -> Result<Self, AssetError> {
+        let file_ext: &OsStr = match file_path.extension() {
             Some(extension) => extension,
             None => {
                 return Err(AssetError::new(
                     format!(
                         "shader source file from {} does not have a valid file extension",
-                        file_path.as_ref()
+                        file_path.to_string_lossy()
                     ),
                     AssetErrorKind::InvalidFileExtension,
                     None,
@@ -134,7 +135,7 @@ impl Asset for Shader {
                 return Err(AssetError::new(
                     format!(
                         "shader source file extension of {} is neither \".vert\" or \".frag\".",
-                        file_path.as_ref()
+                        file_path.to_string_lossy()
                     ),
                     AssetErrorKind::InvalidFileExtension,
                     None,
@@ -142,13 +143,13 @@ impl Asset for Shader {
             }
         };
 
-        match fs::read_to_string(file_path.as_ref()) {
+        match fs::read_to_string(file_path) {
             Ok(contents) => {
                 let shader_id: gl::types::GLuint = match Self::compile(contents.as_str(), kind) {
                     Ok(id) => id,
                     Err(error) => {
                         return Err(AssetError::new(
-                            format!("unable to compile shader from {}", file_path.as_ref()),
+                            format!("unable to compile shader from {}", file_path.to_string_lossy()),
                             AssetErrorKind::LoadingFailed,
                             Some(Box::new(error)),
                         ))
@@ -159,7 +160,7 @@ impl Asset for Shader {
                     id: id.as_ref().into(),
                     shader_id: shader_id,
                     kind: kind,
-                    src_file_path: file_path.as_ref().into(),
+                    src_file_path: file_path.to_path_buf(),
                     is_loaded: true,
                     is_stale: false,
                 };
@@ -167,7 +168,7 @@ impl Asset for Shader {
                 Ok(shader)
             }
             Err(error) => Err(AssetError::new(
-                format!("unable to load asset from {}", file_path.as_ref()),
+                format!("unable to load asset from {}", file_path.to_string_lossy()),
                 AssetErrorKind::LoadingFailed,
                 Some(Box::new(error)),
             )),
@@ -183,14 +184,14 @@ impl Asset for Shader {
             ));
         }
 
-        match fs::read_to_string(self.src_file_path.as_str()) {
+        match fs::read_to_string(self.src_file_path) {
             Ok(contents) => {
                 let new_shader_id: gl::types::GLuint =
                     match Self::compile(contents.as_str(), self.kind) {
                         Ok(id) => id,
                         Err(error) => {
                             return Err(AssetError::new(
-                                format!("unable to hot-reload shader from {}", self.src_file_path),
+                                format!("unable to hot-reload shader from {}", self.src_file_path.to_string_lossy()),
                                 AssetErrorKind::ReloadingFailed,
                                 Some(Box::new(error)),
                             ))
@@ -227,6 +228,10 @@ impl Asset for Shader {
 
     fn is_loaded(&self) -> bool {
         self.is_loaded
+    }
+
+    fn get_src_file_path(&self) -> &Path {
+        self.src_file_path.as_path()
     }
 }
 

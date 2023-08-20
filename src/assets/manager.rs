@@ -1,12 +1,10 @@
 use crate::assets::{Asset, AssetError, AssetErrorKind};
 
-use notify::{self, Watcher};
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::path::Path;
-use std::sync::{Arc, Mutex, RwLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AssetManagerErrorKind {
@@ -51,10 +49,7 @@ impl Error for AssetManagerError {
 pub struct AssetManager<A: Asset> {
     assets: HashMap<String, Arc<Mutex<A>>>,
     callbacks: HashMap<String, Vec<fn()>>,
-
-    // These help with watcher so that we don't need any mutex locks/unlocks.
-    asset_file_paths: Vec<String>,
-    file_path_to_asset_id_map: HashMap<String, String>,
+    file_path_to_asset_id_map: HashMap<PathBuf, String>,
 }
 
 impl<A: Asset> Drop for AssetManager<A> {
@@ -68,9 +63,6 @@ impl<A: Asset> AssetManager<A> {
         Ok(Self {
             assets: HashMap::new(),
             callbacks: HashMap::new(),
-            asset_watcher: None,
-            stale_asset_paths: Arc::new(RwLock::new(vec![])),
-            asset_file_paths: vec![],
             file_path_to_asset_id_map: HashMap::new(),
         })
     }
@@ -81,21 +73,11 @@ impl<A: Asset> AssetManager<A> {
         file_path: S,
     ) -> Result<Arc<Mutex<A>>, AssetError> {
         let asset_id = String::from(id.as_ref());
-        let asset_file_path = String::from(file_path.as_ref());
-        match A::new(asset_id.clone(), asset_file_path.clone()) {
+        let file_path = Path::new(file_path.as_ref());
+        match A::new(asset_id.clone(), &file_path) {
             Ok(asset) => {
-                self.assets
-                    .insert(asset_id.clone(), Arc::new(Mutex::new(asset)));
-                self.asset_file_paths.push(asset_file_path.clone());
-                self.file_path_to_asset_id_map
-                    .insert(asset_file_path.clone(), asset_id.clone());
-
-                match &mut self.asset_watcher {
-                    Some(watcher) => {
-                        watcher.watch(Path::new(&asset_file_path), notify::RecursiveMode::Recursive).unwrap();
-                    },
-                    None => {}
-                }
+                self.assets.insert(asset_id.clone(), Arc::new(Mutex::new(asset)));
+                self.file_path_to_asset_id_map.insert(file_path.to_path_buf(), asset_id.clone());
 
                 Ok(Arc::clone(self.assets.get(&asset_id.clone()).unwrap()))
             }
@@ -131,7 +113,12 @@ impl<A: Asset> AssetManager<A> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(mut asset) => match asset.destroy() {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        let asset_id = String::from(id.as_ref());
+                        self.assets.remove(&asset_id);
+                        self.callbacks.remove(&asset_id);
+                        self.file_path_to_asset_id_map.remove(asset.get_src_file_path());
+                    }
                     Err(err) => {
                         return Err(err);
                     }
@@ -148,12 +135,6 @@ impl<A: Asset> AssetManager<A> {
                 return Ok(None);
             }
         }
-
-        let asset_id = String::from(id.as_ref());
-        self.assets.remove(&asset_id);
-        self.callbacks.remove(&asset_id);
-        self.asset_file_paths.retain(|path| path != &asset_id);
-        self.file_path_to_asset_id_map.remove(&asset_id);
 
         Ok(Some(()))
     }
@@ -186,91 +167,9 @@ impl<A: Asset> AssetManager<A> {
         };
     }
 
-    pub fn start_watcher(&mut self) -> Result<(), AssetManagerError> {
-        fn watcher_func(
-            stale_asset_paths: &Arc<RwLock<Vec<String>>>,
-            event: notify::Result<notify::Event>,
-        ) {
-            match event {
-                Ok(notify::Event {
-                    kind: notify::EventKind::Modify(notify::event::ModifyKind::Any),
-                    paths,
-                    ..
-                }) => {
-                    let mut lock_guard = match stale_asset_paths.write() {
-                        Ok(lock_guard) => lock_guard,
-                        Err(error) => {
-                            panic!(
-                                "watcher for an asset manager \
-                                attempted to write-lock a poisoned lock on the \
-                                tracked stale assets. Error: {:?}",
-                                error
-                            );
-                        }
-                    };
-                    for path in paths {
-                        let path_string = String::from(path.into_os_string().to_string_lossy());
-                        lock_guard.push(path_string);
-                    }
-                }
-                Err(error) => println!("[STUB] Watcher error for asset manager occurred: {error}"),
-                _ => {}
-            }
-        }
-
-        if self.asset_watcher.is_none() {
-            let stale_asset_paths = Arc::clone(&self.stale_asset_paths);
-            let watcher = match notify::recommended_watcher(move |event| {
-                watcher_func(&stale_asset_paths, event);
-            }) {
-                Ok(watcher) => watcher,
-                Err(error) => {
-                    return Err(AssetManagerError::new(
-                        "asset manager watcher error",
-                        AssetManagerErrorKind::WatcherError,
-                        Some(Box::new(error)),
-                    ));
-                }
-            };
-
-            self.asset_watcher = Some(watcher);
-        }
-
-        match &mut self.asset_watcher {
-            Some(watcher) => {
-                for path in &self.asset_file_paths {
-                    // Docs of notify-rs does not specify any reason for an error to be returned, so
-                    // for now, we can confidently use unwrap() in this case.
-                    watcher.watch(Path::new(path), notify::RecursiveMode::Recursive).unwrap();
-                }
-            },
-            None => {
-                return Err(AssetManagerError::new(
-                    "watcher not yet started",
-                    AssetManagerErrorKind::WatcherNotInitializedError,
-                    None,
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn watch_for_changes(&mut self) -> Result<(), AssetManagerError> {
-        let lock_guard = match self.stale_asset_paths.read() {
-            Ok(lock_guard) => lock_guard,
-            Err(error) => {
-                // CHANGE THIS TO ERROR INSTEAD OF PANIC.
-                panic!(
-                    "watcher for an asset manager \
-                    attempted to read-lock a poisoned lock on the \
-                    tracked stale assets. Error: {:?}",
-                    error
-                );
-            }
-        };
-        for asset_path in lock_guard.iter() {
-            let asset_id = match self.file_path_to_asset_id_map.get(asset_path) {
+    pub fn reload_assets_by_path(&mut self, paths: &Vec<PathBuf>) -> Result<(), AssetManagerError> {
+        for path in paths {
+            let asset_id = match self.file_path_to_asset_id_map.get(path) {
                 Some(id) => id,
                 None => continue
             };
@@ -304,5 +203,3 @@ impl<A: Asset> AssetManager<A> {
         Ok(Some(()))
     }
 }
-
-pub fn watch_for_asset_changes()

@@ -5,8 +5,6 @@ mod assets;
 mod c_bridge;
 mod graphics;
 
-use graphics::Program;
-
 use std::mem;
 use std::os;
 use std::ptr;
@@ -15,6 +13,8 @@ use std::sync::Arc;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::video::GLProfile;
+
+use graphics::Program;
 
 fn main() {
     let sdl_context = sdl2::init().unwrap();
@@ -57,6 +57,8 @@ fn main() {
             Err(err) => panic!("{:?}", err), // For now. Maybe.
         };
 
+    let watcher = assets::AssetsWatcher::new();
+
     let shader_program: Program = match Program::new(vec![
         Arc::clone(&vertex_shader),
         Arc::clone(&fragment_shader),
@@ -92,7 +94,6 @@ fn main() {
 
     // Event Process
     let mut event_pump = sdl_context.event_pump().unwrap();
-    shader_asset_manager.start_watcher();
 
     loop {
         let mut do_quit = false;
@@ -113,8 +114,6 @@ fn main() {
         if do_quit {
             break;
         }
-
-        shader_asset_manager.watch_for_changes();
 
         unsafe {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);
