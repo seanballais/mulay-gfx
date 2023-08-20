@@ -127,11 +127,16 @@ fn main() {
         }
 
         // Hot-reload.
-        let asset_ids = shader_asset_manager.file_paths_to_asset_ids(&watcher.get_stale_paths());
+        let stale_paths = watcher.get_stale_paths();
+        let asset_ids = shader_asset_manager.file_paths_to_asset_ids(&stale_paths);
         match shader_asset_manager.reload_assets_by_id(&asset_ids) {
             Ok(_) => {},
             Err(error) => panic!("{:?}", error)
         };
+
+        if !stale_paths.is_empty() {
+            watcher.clear_stale_paths();
+        }
 
         unsafe {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);

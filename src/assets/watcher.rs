@@ -124,8 +124,22 @@ impl AssetsWatcher {
             paths.push(path.clone());
         }
 
-        println!("{}", paths.len());
-
         paths
+    }
+
+    pub fn clear_stale_paths(&self) {
+        let mut lock_guard = match self.stale_paths.write() {
+            Ok(lock_guard) => lock_guard,
+            Err(error) => {
+                // CHANGE THIS TO ERROR INSTEAD OF PANIC.
+                panic!(
+                    "watcher attempted to read-lock a poisoned lock on the \
+                    tracked stale assets. Error: {:?}",
+                    error
+                );
+            }
+        };
+
+        lock_guard.clear();
     }
 }
