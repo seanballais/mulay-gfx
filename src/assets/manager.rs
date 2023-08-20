@@ -51,8 +51,6 @@ impl Error for AssetManagerError {
 pub struct AssetManager<A: Asset> {
     assets: HashMap<String, Arc<Mutex<A>>>,
     callbacks: HashMap<String, Vec<fn()>>,
-    asset_watcher: Option<notify::RecommendedWatcher>,
-    stale_asset_paths: Arc<RwLock<Vec<String>>>,
 
     // These help with watcher so that we don't need any mutex locks/unlocks.
     asset_file_paths: Vec<String>,
@@ -91,6 +89,14 @@ impl<A: Asset> AssetManager<A> {
                 self.asset_file_paths.push(asset_file_path.clone());
                 self.file_path_to_asset_id_map
                     .insert(asset_file_path.clone(), asset_id.clone());
+
+                match &mut self.asset_watcher {
+                    Some(watcher) => {
+                        watcher.watch(Path::new(&asset_file_path), notify::RecursiveMode::Recursive).unwrap();
+                    },
+                    None => {}
+                }
+
                 Ok(Arc::clone(self.assets.get(&asset_id.clone()).unwrap()))
             }
             Err(err) => Err(err),
@@ -182,7 +188,7 @@ impl<A: Asset> AssetManager<A> {
 
     pub fn start_watcher(&mut self) -> Result<(), AssetManagerError> {
         fn watcher_func(
-            stale_asset_paths: Arc<RwLock<Vec<String>>>,
+            stale_asset_paths: &Arc<RwLock<Vec<String>>>,
             event: notify::Result<notify::Event>,
         ) {
             match event {
@@ -191,7 +197,7 @@ impl<A: Asset> AssetManager<A> {
                     paths,
                     ..
                 }) => {
-                    let lock_guard = match stale_asset_paths.write() {
+                    let mut lock_guard = match stale_asset_paths.write() {
                         Ok(lock_guard) => lock_guard,
                         Err(error) => {
                             panic!(
@@ -213,9 +219,9 @@ impl<A: Asset> AssetManager<A> {
         }
 
         if self.asset_watcher.is_none() {
-            let watcher = match notify::recommended_watcher(|event| {
-                let stale_asset_paths = Arc::clone(&self.stale_asset_paths);
-                watcher_func(stale_asset_paths, event);
+            let stale_asset_paths = Arc::clone(&self.stale_asset_paths);
+            let watcher = match notify::recommended_watcher(move |event| {
+                watcher_func(&stale_asset_paths, event);
             }) {
                 Ok(watcher) => watcher,
                 Err(error) => {
@@ -226,10 +232,12 @@ impl<A: Asset> AssetManager<A> {
                     ));
                 }
             };
+
+            self.asset_watcher = Some(watcher);
         }
 
-        match self.asset_watcher {
-            Some(mut watcher) => {
+        match &mut self.asset_watcher {
+            Some(watcher) => {
                 for path in &self.asset_file_paths {
                     // Docs of notify-rs does not specify any reason for an error to be returned, so
                     // for now, we can confidently use unwrap() in this case.
@@ -248,11 +256,11 @@ impl<A: Asset> AssetManager<A> {
         Ok(())
     }
 
-    pub fn watch_for_changes(&self) -> Result<(), AssetManagerError> {
+    pub fn watch_for_changes(&mut self) -> Result<(), AssetManagerError> {
         let lock_guard = match self.stale_asset_paths.read() {
             Ok(lock_guard) => lock_guard,
             Err(error) => {
-                // CHANGE THIS TO ERROR ISNTEAD OF PANIC.
+                // CHANGE THIS TO ERROR INSTEAD OF PANIC.
                 panic!(
                     "watcher for an asset manager \
                     attempted to read-lock a poisoned lock on the \
@@ -277,7 +285,7 @@ impl<A: Asset> AssetManager<A> {
                 }
             }
         }
-
+    
         Ok(())
     }
 
@@ -296,3 +304,5 @@ impl<A: Asset> AssetManager<A> {
         Ok(Some(()))
     }
 }
+
+pub fn watch_for_asset_changes()

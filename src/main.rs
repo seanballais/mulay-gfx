@@ -57,8 +57,6 @@ fn main() {
             Err(err) => panic!("{:?}", err), // For now. Maybe.
         };
 
-    shader_asset_manager.watch();
-
     let shader_program: Program = match Program::new(vec![
         Arc::clone(&vertex_shader),
         Arc::clone(&fragment_shader),
@@ -94,6 +92,7 @@ fn main() {
 
     // Event Process
     let mut event_pump = sdl_context.event_pump().unwrap();
+    shader_asset_manager.start_watcher();
 
     loop {
         let mut do_quit = false;
@@ -114,6 +113,8 @@ fn main() {
         if do_quit {
             break;
         }
+
+        shader_asset_manager.watch_for_changes();
 
         unsafe {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);
