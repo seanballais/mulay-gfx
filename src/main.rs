@@ -59,9 +59,12 @@ fn main() {
 
     let mut watcher = match assets::AssetsWatcher::new() {
         Ok(watcher) => watcher,
-        Err(error) => panic!("{:?}", error) // For now. Maybe.
+        Err(error) => panic!("{:?}", error), // For now. Maybe.
     };
-    watcher.add_paths_to_watchlist(&vec!["assets/shaders/triangle.vert", "assets/shaders/triangle.frag"]);
+    watcher.add_paths_to_watchlist(&vec![
+        "assets/shaders/triangle.vert",
+        "assets/shaders/triangle.frag",
+    ]);
 
     let shader_program: Program = match Program::new(vec![
         Arc::clone(&vertex_shader),
@@ -130,8 +133,8 @@ fn main() {
         let stale_paths = watcher.get_stale_paths();
         let asset_ids = shader_asset_manager.file_paths_to_asset_ids(&stale_paths);
         match shader_asset_manager.reload_assets_by_id(&asset_ids) {
-            Ok(_) => {},
-            Err(error) => panic!("{:?}", error)
+            Ok(_) => {}
+            Err(error) => panic!("{:?}", error),
         };
 
         if !stale_paths.is_empty() {

@@ -7,7 +7,7 @@ use notify::{self, Watcher};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AssetsWatcherErrorKind {
-    InitializationError
+    InitializationError,
 }
 
 #[derive(Debug)]
@@ -45,12 +45,12 @@ impl Error for AssetsWatcherError {
 
 pub struct AssetsWatcher {
     watcher: notify::RecommendedWatcher,
-	stale_paths: Arc<RwLock<Vec<PathBuf>>>
+    stale_paths: Arc<RwLock<Vec<PathBuf>>>,
 }
 
 impl AssetsWatcher {
-	pub fn new() -> Result<Self, AssetsWatcherError> {
-		fn watcher_func(
+    pub fn new() -> Result<Self, AssetsWatcherError> {
+        fn watcher_func(
             stale_paths: &Arc<RwLock<Vec<PathBuf>>>,
             event: notify::Result<notify::Event>,
         ) {
@@ -78,7 +78,7 @@ impl AssetsWatcher {
                 _ => {}
             }
         }
-        
+
         let stale_paths: Arc<RwLock<Vec<PathBuf>>> = Arc::new(RwLock::new(vec![]));
 
         let stale_paths_clone = Arc::clone(&stale_paths);
@@ -95,16 +95,21 @@ impl AssetsWatcher {
             }
         };
 
-        Ok(Self {watcher, stale_paths})
-	}
+        Ok(Self {
+            watcher,
+            stale_paths,
+        })
+    }
 
-	pub fn add_paths_to_watchlist<S: AsRef<str>>(&mut self, paths: &Vec<S>) {
+    pub fn add_paths_to_watchlist<S: AsRef<str>>(&mut self, paths: &Vec<S>) {
         for path in paths {
             // Docs of notify-rs does not specify any reason for an error to be returned, so
             // for now, we can confidently use unwrap() in this case.
-            self.watcher.watch(Path::new(path.as_ref()), notify::RecursiveMode::Recursive).unwrap();
+            self.watcher
+                .watch(Path::new(path.as_ref()), notify::RecursiveMode::Recursive)
+                .unwrap();
         }
-	}
+    }
 
     pub fn get_stale_paths(&self) -> Vec<PathBuf> {
         let lock_guard = match self.stale_paths.read() {

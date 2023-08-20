@@ -13,7 +13,7 @@ pub enum AssetManagerErrorKind {
     AssetLockPoisoned,
     AssetReloadError,
     AssetDestructionError,
-    CurrentWorkingDirectoryError
+    CurrentWorkingDirectoryError,
 }
 
 #[derive(Debug)]
@@ -76,28 +76,32 @@ impl<A: Asset> AssetManager<A> {
         file_path: S,
     ) -> Result<Arc<Mutex<A>>, AssetManagerError> {
         let asset_id = String::from(id.as_ref());
-        
+
         let mut abs_file_path = match env::current_dir() {
             Ok(path) => path,
-            Err(error) => return Err(AssetManagerError::new(
-                "current working directory cannot be used",
-                AssetManagerErrorKind::CurrentWorkingDirectoryError,
-                Some(Box::new(error))
-            ))
+            Err(error) => {
+                return Err(AssetManagerError::new(
+                    "current working directory cannot be used",
+                    AssetManagerErrorKind::CurrentWorkingDirectoryError,
+                    Some(Box::new(error)),
+                ))
+            }
         };
         abs_file_path.push(file_path.as_ref());
 
         match A::new(asset_id.clone(), &abs_file_path) {
             Ok(asset) => {
-                self.assets.insert(asset_id.clone(), Arc::new(Mutex::new(asset)));
-                self.file_path_to_asset_id_map.insert(abs_file_path, asset_id.clone());
+                self.assets
+                    .insert(asset_id.clone(), Arc::new(Mutex::new(asset)));
+                self.file_path_to_asset_id_map
+                    .insert(abs_file_path, asset_id.clone());
 
                 Ok(Arc::clone(self.assets.get(&asset_id.clone()).unwrap()))
             }
             Err(error) => Err(AssetManagerError::new(
                 format!("failed to load asset from \"{}\"", file_path.as_ref()),
                 AssetManagerErrorKind::AssetLoadError,
-                Some(Box::new(error))
+                Some(Box::new(error)),
             )),
         }
     }
@@ -113,21 +117,39 @@ impl<A: Asset> AssetManager<A> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(mut asset) => match asset.reload() {
-                    Ok(_) => Ok(Some(())),
-                    Err(error) => Err(AssetManagerError::new(
-                        format!("failed to load asset, \"{}\"", id.as_ref()),
-                        AssetManagerErrorKind::AssetReloadError,
-                        Some(Box::new(error))
-                    ))
+                    Ok(_) => {}
+                    Err(error) => {
+                        return Err(AssetManagerError::new(
+                            format!("failed to load asset, \"{}\"", id.as_ref()),
+                            AssetManagerErrorKind::AssetReloadError,
+                            Some(Box::new(error)),
+                        ))
+                    }
                 },
-                Err(_) => Err(AssetManagerError::new(
-                    format!("asset, \"{}\", lock poisoned", id.as_ref()),
-                    AssetManagerErrorKind::AssetLockPoisoned,
-                    None
-                )),
+                Err(_) => {
+                    return Err(AssetManagerError::new(
+                        format!("asset, \"{}\", lock poisoned", id.as_ref()),
+                        AssetManagerErrorKind::AssetLockPoisoned,
+                        None,
+                    ))
+                }
             },
-            None => Ok(None),
+            None => return Ok(None),
         }
+
+        match self.run_asset_reload_callbacks(&String::from(id.as_ref())) {
+            Ok(_) => return Ok(Some(())),
+            Err(error) => {
+                return Err(AssetManagerError::new(
+                    format!(
+                        "unable to call reload callbacks for asset with id, \"{}\"",
+                        id.as_ref()
+                    ),
+                    AssetManagerErrorKind::AssetReloadError,
+                    Some(Box::new(error)),
+                ))
+            }
+        };
     }
 
     pub fn destroy_asset<S: AsRef<str>>(&mut self, id: S) -> Result<Option<()>, AssetManagerError> {
@@ -135,21 +157,26 @@ impl<A: Asset> AssetManager<A> {
             Some(ptr) => match ptr.lock() {
                 Ok(mut asset) => match asset.destroy() {
                     Ok(_) => {
-                        self.file_path_to_asset_id_map.remove(asset.get_src_file_path());
+                        self.file_path_to_asset_id_map
+                            .remove(asset.get_src_file_path());
                     }
-                    Err(error) => return Err(AssetManagerError::new(
-                        format!("failed to destroy asset, \"{}\"", id.as_ref()),
-                        AssetManagerErrorKind::AssetReloadError,
-                        Some(Box::new(error))
-                    ))
+                    Err(error) => {
+                        return Err(AssetManagerError::new(
+                            format!("failed to destroy asset, \"{}\"", id.as_ref()),
+                            AssetManagerErrorKind::AssetReloadError,
+                            Some(Box::new(error)),
+                        ))
+                    }
                 },
-                Err(err) => return Err(AssetManagerError::new(
-                    format!("asset, \"{}\", lock poisoned", id.as_ref()),
-                    AssetManagerErrorKind::AssetLockPoisoned,
-                    None
-                ))
+                Err(err) => {
+                    return Err(AssetManagerError::new(
+                        format!("asset, \"{}\", lock poisoned", id.as_ref()),
+                        AssetManagerErrorKind::AssetLockPoisoned,
+                        None,
+                    ))
+                }
             },
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         let asset_id = String::from(id.as_ref());
@@ -159,17 +186,20 @@ impl<A: Asset> AssetManager<A> {
         Ok(Some(()))
     }
 
-    pub fn is_asset_loaded<S: AsRef<str>>(&mut self, id: S) -> Result<Option<bool>, AssetManagerError> {
+    pub fn is_asset_loaded<S: AsRef<str>>(
+        &mut self,
+        id: S,
+    ) -> Result<Option<bool>, AssetManagerError> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(asset) => Ok(Some(asset.is_loaded())),
                 Err(err) => Err(AssetManagerError::new(
                     format!("asset, \"{}\", lock poisoned", id.as_ref()),
                     AssetManagerErrorKind::AssetLockPoisoned,
-                    None
+                    None,
                 )),
             },
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -187,27 +217,23 @@ impl<A: Asset> AssetManager<A> {
         };
     }
 
-    pub fn reload_assets_by_id<S: AsRef<str>>(&mut self, ids: &Vec<S>) -> Result<(), AssetManagerError> {
+    pub fn reload_assets_by_id<S: AsRef<str>>(
+        &mut self,
+        ids: &Vec<S>,
+    ) -> Result<(), AssetManagerError> {
         for id in ids {
             match self.reload_asset(id) {
-                Ok(_) => {},
-                Err(error) => return Err(AssetManagerError::new(
-                    format!("failed to reload asset with id, \"{}\"", id.as_ref()),
-                    AssetManagerErrorKind::AssetReloadError,
-                    Some(Box::new(error))
-                ))
-            }
-
-            match self.run_asset_reload_callbacks(&String::from(id.as_ref())) {
-                Ok(_) => {},
-                Err(error) => return Err(AssetManagerError::new(
-                    format!("unable to call reload callbacks for asset with id, \"{}\"", id.as_ref()),
-                    AssetManagerErrorKind::AssetReloadError,
-                    Some(Box::new(error)),
-                ))
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(AssetManagerError::new(
+                        format!("failed to reload asset with id, \"{}\"", id.as_ref()),
+                        AssetManagerErrorKind::AssetReloadError,
+                        Some(Box::new(error)),
+                    ))
+                }
             }
         }
-    
+
         Ok(())
     }
 
@@ -226,7 +252,10 @@ impl<A: Asset> AssetManager<A> {
         ids
     }
 
-    fn run_asset_reload_callbacks(&mut self, asset_id: &String) -> Result<Option<()>, AssetManagerError> {
+    fn run_asset_reload_callbacks(
+        &mut self,
+        asset_id: &String,
+    ) -> Result<Option<()>, AssetManagerError> {
         if let Some(callbacks) = self.callbacks.get(asset_id.as_str()) {
             for func in callbacks {
                 func();

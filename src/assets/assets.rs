@@ -149,7 +149,10 @@ impl Asset for Shader {
                     Ok(id) => id,
                     Err(error) => {
                         return Err(AssetError::new(
-                            format!("unable to compile shader from {}", file_path.to_string_lossy()),
+                            format!(
+                                "unable to compile shader from {}",
+                                file_path.to_string_lossy()
+                            ),
                             AssetErrorKind::LoadingFailed,
                             Some(Box::new(error)),
                         ))
@@ -191,7 +194,10 @@ impl Asset for Shader {
                         Ok(id) => id,
                         Err(error) => {
                             return Err(AssetError::new(
-                                format!("unable to hot-reload shader from {}", self.src_file_path.to_string_lossy()),
+                                format!(
+                                    "unable to hot-reload shader from {}",
+                                    self.src_file_path.to_string_lossy()
+                                ),
                                 AssetErrorKind::ReloadingFailed,
                                 Some(Box::new(error)),
                             ))
