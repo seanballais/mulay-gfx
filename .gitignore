@@ -31,6 +31,8 @@
 *.out
 *.app
 
-
 # Added by cargo
 /target
+
+# IDE Files
+.vs/

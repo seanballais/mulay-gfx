@@ -57,7 +57,18 @@ fn main() {
             Err(err) => panic!("{:?}", err), // For now. Maybe.
         };
 
-    let watcher = assets::AssetsWatcher::new();
+    shader_asset_manager.register_asset_reload_callback("vertex-shader", || {
+        println!("Vertex shader test.");
+    });
+    shader_asset_manager.register_asset_reload_callback("fragment-shader", || {
+        println!("Fragment shader test.");
+    });
+
+    let mut watcher = match assets::AssetsWatcher::new() {
+        Ok(watcher) => watcher,
+        Err(error) => panic!("{:?}", error) // For now. Maybe.
+    };
+    watcher.add_paths_to_watchlist(&vec!["assets/shaders/triangle.vert", "assets/shaders/triangle.frag"]);
 
     let shader_program: Program = match Program::new(vec![
         Arc::clone(&vertex_shader),
@@ -114,6 +125,13 @@ fn main() {
         if do_quit {
             break;
         }
+
+        // Hot-reload.
+        let asset_ids = shader_asset_manager.file_paths_to_asset_ids(&watcher.get_stale_paths());
+        match shader_asset_manager.reload_assets_by_id(&asset_ids) {
+            Ok(_) => {},
+            Err(error) => panic!("{:?}", error)
+        };
 
         unsafe {
             gl::ClearColor(0.14f32, 0.14f32, 0.14f32, 1.0f32);

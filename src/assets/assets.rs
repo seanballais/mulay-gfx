@@ -184,7 +184,7 @@ impl Asset for Shader {
             ));
         }
 
-        match fs::read_to_string(self.src_file_path) {
+        match fs::read_to_string(self.src_file_path.as_path()) {
             Ok(contents) => {
                 let new_shader_id: gl::types::GLuint =
                     match Self::compile(contents.as_str(), self.kind) {

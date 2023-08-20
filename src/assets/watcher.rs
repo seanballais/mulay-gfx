@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use notify::{self, Watcher};
@@ -81,7 +81,7 @@ impl AssetsWatcher {
         
         let stale_paths: Arc<RwLock<Vec<PathBuf>>> = Arc::new(RwLock::new(vec![]));
 
-        let stale_paths_clone = stale_paths.clone();
+        let stale_paths_clone = Arc::clone(&stale_paths);
         let watcher = match notify::recommended_watcher(move |event| {
             watcher_func(&stale_paths_clone, event);
         }) {
@@ -98,11 +98,11 @@ impl AssetsWatcher {
         Ok(Self {watcher, stale_paths})
 	}
 
-	pub fn add_paths_to_watchlist(&mut self, paths: &Vec<PathBuf>) {
+	pub fn add_paths_to_watchlist<S: AsRef<str>>(&mut self, paths: &Vec<S>) {
         for path in paths {
             // Docs of notify-rs does not specify any reason for an error to be returned, so
             // for now, we can confidently use unwrap() in this case.
-            self.watcher.watch(path.as_path(), notify::RecursiveMode::Recursive).unwrap();
+            self.watcher.watch(Path::new(path.as_ref()), notify::RecursiveMode::Recursive).unwrap();
         }
 	}
 
@@ -123,6 +123,8 @@ impl AssetsWatcher {
         for path in lock_guard.iter() {
             paths.push(path.clone());
         }
+
+        println!("{}", paths.len());
 
         paths
     }

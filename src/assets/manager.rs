@@ -1,6 +1,7 @@
 use crate::assets::{Asset, AssetError, AssetErrorKind};
 
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -8,9 +9,11 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AssetManagerErrorKind {
-    WatcherError,
-    WatcherNotInitializedError,
-    AssetReloadError
+    AssetLoadError,
+    AssetLockPoisoned,
+    AssetReloadError,
+    AssetDestructionError,
+    CurrentWorkingDirectoryError
 }
 
 #[derive(Debug)]
@@ -71,17 +74,31 @@ impl<A: Asset> AssetManager<A> {
         &mut self,
         id: S,
         file_path: S,
-    ) -> Result<Arc<Mutex<A>>, AssetError> {
+    ) -> Result<Arc<Mutex<A>>, AssetManagerError> {
         let asset_id = String::from(id.as_ref());
-        let file_path = Path::new(file_path.as_ref());
-        match A::new(asset_id.clone(), &file_path) {
+        
+        let mut abs_file_path = match env::current_dir() {
+            Ok(path) => path,
+            Err(error) => return Err(AssetManagerError::new(
+                "current working directory cannot be used",
+                AssetManagerErrorKind::CurrentWorkingDirectoryError,
+                Some(Box::new(error))
+            ))
+        };
+        abs_file_path.push(file_path.as_ref());
+
+        match A::new(asset_id.clone(), &abs_file_path) {
             Ok(asset) => {
                 self.assets.insert(asset_id.clone(), Arc::new(Mutex::new(asset)));
-                self.file_path_to_asset_id_map.insert(file_path.to_path_buf(), asset_id.clone());
+                self.file_path_to_asset_id_map.insert(abs_file_path, asset_id.clone());
 
                 Ok(Arc::clone(self.assets.get(&asset_id.clone()).unwrap()))
             }
-            Err(err) => Err(err),
+            Err(error) => Err(AssetManagerError::new(
+                format!("failed to load asset from \"{}\"", file_path.as_ref()),
+                AssetManagerErrorKind::AssetLoadError,
+                Some(Box::new(error))
+            )),
         }
     }
 
@@ -92,64 +109,67 @@ impl<A: Asset> AssetManager<A> {
         }
     }
 
-    pub fn reload_asset<S: AsRef<str>>(&mut self, id: S) -> Result<Option<()>, AssetError> {
+    pub fn reload_asset<S: AsRef<str>>(&mut self, id: S) -> Result<Option<()>, AssetManagerError> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(mut asset) => match asset.reload() {
                     Ok(_) => Ok(Some(())),
-                    Err(err) => Err(err),
+                    Err(error) => Err(AssetManagerError::new(
+                        format!("failed to load asset, \"{}\"", id.as_ref()),
+                        AssetManagerErrorKind::AssetReloadError,
+                        Some(Box::new(error))
+                    ))
                 },
-                Err(_) => Err(AssetError::new(
-                    format!("asset lock poisoned"),
-                    AssetErrorKind::Poisoned,
-                    None,
+                Err(_) => Err(AssetManagerError::new(
+                    format!("asset, \"{}\", lock poisoned", id.as_ref()),
+                    AssetManagerErrorKind::AssetLockPoisoned,
+                    None
                 )),
             },
             None => Ok(None),
         }
     }
 
-    pub fn destroy_asset<S: AsRef<str>>(&mut self, id: S) -> Result<Option<()>, AssetError> {
+    pub fn destroy_asset<S: AsRef<str>>(&mut self, id: S) -> Result<Option<()>, AssetManagerError> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(mut asset) => match asset.destroy() {
                     Ok(_) => {
-                        let asset_id = String::from(id.as_ref());
-                        self.assets.remove(&asset_id);
-                        self.callbacks.remove(&asset_id);
                         self.file_path_to_asset_id_map.remove(asset.get_src_file_path());
                     }
-                    Err(err) => {
-                        return Err(err);
-                    }
+                    Err(error) => return Err(AssetManagerError::new(
+                        format!("failed to destroy asset, \"{}\"", id.as_ref()),
+                        AssetManagerErrorKind::AssetReloadError,
+                        Some(Box::new(error))
+                    ))
                 },
-                Err(err) => {
-                    return Err(AssetError::new(
-                        "asset lock poisoned",
-                        AssetErrorKind::Poisoned,
-                        None,
-                    ));
-                }
+                Err(err) => return Err(AssetManagerError::new(
+                    format!("asset, \"{}\", lock poisoned", id.as_ref()),
+                    AssetManagerErrorKind::AssetLockPoisoned,
+                    None
+                ))
             },
-            None => {
-                return Ok(None);
-            }
-        }
+            None => return Ok(None)
+        };
+
+        let asset_id = String::from(id.as_ref());
+        self.assets.remove(&asset_id);
+        self.callbacks.remove(&asset_id);
 
         Ok(Some(()))
     }
 
-    pub fn is_asset_loaded<S: AsRef<str>>(&mut self, id: S) -> Result<Option<bool>, AssetError> {
+    pub fn is_asset_loaded<S: AsRef<str>>(&mut self, id: S) -> Result<Option<bool>, AssetManagerError> {
         match self.assets.get_mut(id.as_ref().into()) {
             Some(ptr) => match ptr.lock() {
                 Ok(asset) => Ok(Some(asset.is_loaded())),
-                Err(err) => Err(AssetError::new(
-                    format!("asset lock poisoned"),
-                    AssetErrorKind::Poisoned,
-                    None,
+                Err(err) => Err(AssetManagerError::new(
+                    format!("asset, \"{}\", lock poisoned", id.as_ref()),
+                    AssetManagerErrorKind::AssetLockPoisoned,
+                    None
                 )),
             },
-            None => Ok(None),
+            None => Ok(None)
         }
     }
 
@@ -167,13 +187,9 @@ impl<A: Asset> AssetManager<A> {
         };
     }
 
-    pub fn reload_assets_by_path(&mut self, paths: &Vec<PathBuf>) -> Result<(), AssetManagerError> {
-        for path in paths {
-            let asset_id = match self.file_path_to_asset_id_map.get(path) {
-                Some(id) => id,
-                None => continue
-            };
-            match self.run_asset_reload_callbacks(asset_id) {
+    pub fn reload_assets_by_id<S: AsRef<str>>(&mut self, ids: &Vec<S>) -> Result<(), AssetManagerError> {
+        for id in ids {
+            match self.run_asset_reload_callbacks(&String::from(id.as_ref())) {
                 Ok(_) => {},
                 Err(error) => {
                     return Err(AssetManagerError::new(
@@ -188,7 +204,22 @@ impl<A: Asset> AssetManager<A> {
         Ok(())
     }
 
-    fn run_asset_reload_callbacks(&mut self, asset_id: &String) -> Result<Option<()>, AssetError> {
+    pub fn file_paths_to_asset_ids(&self, paths: &Vec<PathBuf>) -> Vec<String> {
+        let mut ids = vec![];
+        for path in paths {
+            let asset_id = match self.file_path_to_asset_id_map.get(path) {
+                Some(id) => id,
+                None => {
+                    continue;
+                }
+            };
+            ids.push(asset_id.clone());
+        }
+
+        ids
+    }
+
+    fn run_asset_reload_callbacks(&mut self, asset_id: &String) -> Result<Option<()>, AssetManagerError> {
         match self.reload_asset(asset_id.as_str()) {
             Ok(_) => {}
             Err(error) => return Err(error),
