@@ -57,13 +57,6 @@ fn main() {
             Err(err) => panic!("{:?}", err), // For now. Maybe.
         };
 
-    shader_asset_manager.register_asset_reload_callback("vertex-shader", || {
-        println!("Vertex shader test.");
-    });
-    shader_asset_manager.register_asset_reload_callback("fragment-shader", || {
-        println!("Fragment shader test.");
-    });
-
     let mut watcher = match assets::AssetsWatcher::new() {
         Ok(watcher) => watcher,
         Err(error) => panic!("{:?}", error) // For now. Maybe.
@@ -77,6 +70,13 @@ fn main() {
         Ok(program) => program,
         Err(err) => panic!("{:?}", err),
     };
+
+    shader_asset_manager.register_asset_reload_callback("vertex-shader", || {
+        println!("Vertex shader test.");
+    });
+    shader_asset_manager.register_asset_reload_callback("fragment-shader", || {
+        println!("Fragment shader test.");
+    });
 
     let mut vao_id: u32 = 0;
     let mut vbo_id: u32 = 0;

@@ -189,15 +189,22 @@ impl<A: Asset> AssetManager<A> {
 
     pub fn reload_assets_by_id<S: AsRef<str>>(&mut self, ids: &Vec<S>) -> Result<(), AssetManagerError> {
         for id in ids {
+            match self.reload_asset(id) {
+                Ok(_) => {},
+                Err(error) => return Err(AssetManagerError::new(
+                    format!("failed to reload asset with id, \"{}\"", id.as_ref()),
+                    AssetManagerErrorKind::AssetReloadError,
+                    Some(Box::new(error))
+                ))
+            }
+
             match self.run_asset_reload_callbacks(&String::from(id.as_ref())) {
                 Ok(_) => {},
-                Err(error) => {
-                    return Err(AssetManagerError::new(
-                        "unable to reload asset",
-                        AssetManagerErrorKind::AssetReloadError,
-                        Some(Box::new(error)),
-                    ));
-                }
+                Err(error) => return Err(AssetManagerError::new(
+                    format!("unable to call reload callbacks for asset with id, \"{}\"", id.as_ref()),
+                    AssetManagerErrorKind::AssetReloadError,
+                    Some(Box::new(error)),
+                ))
             }
         }
     
@@ -220,11 +227,6 @@ impl<A: Asset> AssetManager<A> {
     }
 
     fn run_asset_reload_callbacks(&mut self, asset_id: &String) -> Result<Option<()>, AssetManagerError> {
-        match self.reload_asset(asset_id.as_str()) {
-            Ok(_) => {}
-            Err(error) => return Err(error),
-        };
-
         if let Some(callbacks) = self.callbacks.get(asset_id.as_str()) {
             for func in callbacks {
                 func();
