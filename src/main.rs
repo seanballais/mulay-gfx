@@ -1,14 +1,16 @@
+use std::ffi::CString;
+use std::mem;
+use std::os;
+use std::ptr;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
 extern crate gl;
 extern crate sdl2;
 
 mod assets;
 mod c_bridge;
 mod graphics;
-
-use std::mem;
-use std::os;
-use std::ptr;
-use std::sync::{Arc, Mutex};
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -39,7 +41,9 @@ fn main() {
 
     // Set up data.
     let vertices = vec![
-        -0.5f32, -0.5f32, 0.0f32, 0.5f32, -0.5f32, 0.0f32, 0.0f32, 0.5f32, 0.0f32,
+        -0.25f32, -0.25f32, 0.0f32,
+         0.25f32, -0.25f32, 0.0f32,
+         0.0f32, 0.25f32, 0.0f32,
     ];
 
     let mut shader_asset_manager = match assets::AssetManager::<assets::Shader>::new() {
@@ -108,10 +112,17 @@ fn main() {
         gl::EnableVertexAttribArray(0);
     }
 
+    let mut app_time_start = Instant::now();
+    let mut frame_time_start = Instant::now();
+    let mut frame_time_end =  Instant::now();
+
     // Event Process
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     loop {
+        let time_since_last_frame = frame_time_end - frame_time_start;
+        frame_time_start = Instant::now();
+
         let mut do_quit = false;
 
         for event in event_pump.poll_iter() {
@@ -148,11 +159,18 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             gl::UseProgram(shader_program.lock().unwrap().id());
+            match shader_program.lock().unwrap().add_uniform1f("elapsedTime", app_time_start.elapsed().as_secs_f32()) {
+                Ok(_) => {},
+                Err(error) => panic!("{:?}", error)
+            };
+
             gl::BindVertexArray(vao_id);
 
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
 
         window.gl_swap_window();
+
+        frame_time_end = Instant::now();
     }
 }

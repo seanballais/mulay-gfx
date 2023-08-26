@@ -6,13 +6,14 @@ extern crate gl;
 use crate::assets::Shader;
 
 use std::error::Error;
+use std::ffi::CString;
 use std::fmt;
-use std::mem;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ProgramErrorKind {
     ShaderAssetPoisoned,
+    UniformError
 }
 
 #[derive(Debug)]
@@ -157,6 +158,24 @@ impl Program {
         }
 
         self.id = program_id;
+
+        Ok(())
+    }
+
+    pub fn add_uniform1f<S: AsRef<str>>(&self, name: S, value: f32) -> Result<(), ProgramError> {
+        let name_cstring = match CString::new(name.as_ref()) {
+            Ok(name) => name,
+            Err(error) => return Err(ProgramError::new(
+                "unable to convert uniform name to its C-string counterpart",
+                ProgramErrorKind::UniformError,
+                Some(Box::new(error))
+            ))
+        };
+
+        unsafe {
+            let loc = gl::GetUniformLocation(self.id, name_cstring.as_c_str().as_ptr());
+            gl::Uniform1f(loc, value);
+        };
 
         Ok(())
     }
