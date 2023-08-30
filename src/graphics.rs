@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum ProgramErrorKind {
     ShaderAssetPoisoned,
-    UniformError
+    UniformError,
 }
 
 #[derive(Debug)]
@@ -165,11 +165,13 @@ impl Program {
     pub fn add_uniform1f<S: AsRef<str>>(&self, name: S, value: f32) -> Result<(), ProgramError> {
         let name_cstring = match CString::new(name.as_ref()) {
             Ok(name) => name,
-            Err(error) => return Err(ProgramError::new(
-                "unable to convert uniform name to its C-string counterpart",
-                ProgramErrorKind::UniformError,
-                Some(Box::new(error))
-            ))
+            Err(error) => {
+                return Err(ProgramError::new(
+                    "unable to convert uniform name to its C-string counterpart",
+                    ProgramErrorKind::UniformError,
+                    Some(Box::new(error)),
+                ))
+            }
         };
 
         unsafe {

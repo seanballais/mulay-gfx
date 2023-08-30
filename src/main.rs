@@ -43,9 +43,7 @@ fn main() {
 
     // Set up data.
     let vertices = vec![
-        -0.25f32, -0.25f32, 0.0f32,
-         0.25f32, -0.25f32, 0.0f32,
-         0.0f32, 0.25f32, 0.0f32,
+        -0.25f32, -0.25f32, 0.0f32, 0.25f32, -0.25f32, 0.0f32, 0.0f32, 0.25f32, 0.0f32,
     ];
 
     let mut shader_asset_manager = match assets::AssetManager::<assets::Shader>::new() {
@@ -79,7 +77,7 @@ fn main() {
         Ok(program) => Arc::new(Mutex::new(program)),
         Err(err) => panic!("{:?}", err),
     };
-    
+
     let shader_program_ptr1 = Arc::clone(&shader_program);
     let shader_program_ptr2 = Arc::clone(&shader_program);
     shader_asset_manager.register_asset_reload_callback("vertex-shader", move || {
@@ -116,7 +114,7 @@ fn main() {
 
     let mut app_time_start = Instant::now();
     let mut frame_time_start = Instant::now();
-    let mut frame_time_end =  Instant::now();
+    let mut frame_time_end = Instant::now();
 
     // Event Process
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -136,7 +134,7 @@ fn main() {
                 } => {
                     do_quit = true;
                 }
-                _ => app_ui.process_input(&window, event)
+                _ => app_ui.process_input(&window, event),
             };
         }
 
@@ -161,9 +159,13 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             gl::UseProgram(shader_program.lock().unwrap().id());
-            match shader_program.lock().unwrap().add_uniform1f("elapsedTime", app_time_start.elapsed().as_secs_f32()) {
-                Ok(_) => {},
-                Err(error) => panic!("{:?}", error)
+            match shader_program
+                .lock()
+                .unwrap()
+                .add_uniform1f("elapsedTime", app_time_start.elapsed().as_secs_f32())
+            {
+                Ok(_) => {}
+                Err(error) => panic!("{:?}", error),
             };
 
             gl::BindVertexArray(vao_id);
