@@ -1,16 +1,16 @@
-use std::ffi::CString;
-use std::mem;
-use std::os;
-use std::ptr;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-
 extern crate gl;
 extern crate sdl2;
 
 mod assets;
 mod c_bridge;
 mod graphics;
+mod ui;
+
+use std::mem;
+use std::os;
+use std::ptr;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -38,6 +38,8 @@ fn main() {
 
     debug_assert_eq!(gl_attr.context_profile(), GLProfile::Core);
     debug_assert_eq!(gl_attr.context_version(), (3, 3));
+
+    let mut app_ui = ui::UI::new(&window);
 
     // Set up data.
     let vertices = vec![
@@ -134,8 +136,8 @@ fn main() {
                 } => {
                     do_quit = true;
                 }
-                _ => {}
-            }
+                _ => app_ui.process_input(&window, event)
+            };
         }
 
         if do_quit {
@@ -168,6 +170,8 @@ fn main() {
 
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
         }
+
+        app_ui.draw_frames(&window, app_time_start.elapsed().as_secs_f64());
 
         window.gl_swap_window();
 
